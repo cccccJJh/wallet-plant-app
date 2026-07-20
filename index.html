@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>가계부 & 식물 관리 마스터</title>
+    <!-- 통계용 차트 라이브러리 추가 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /*:root { --primary: #4CAF50; --expense: #ff4444; --income: #00C851; --bg: #f8f9fa; }
+        body { margin: 0; font-family: 'Malgun Gothic', sans-serif; background: var(--bg); padding-bottom: 80px; -webkit-user-select: none; }
+        header { background: var(--primary); color: white; padding: 15px; text-align: center; font-weight: bold; font-size: 18px; position: sticky; top: 0; z-index: 100; }
+        */
+		
+		:root {
+			--primary: #8FBC8F; /* 세이지 그린 */
+			--expense: #E9967A; /* 톤 다운된 코랄 */
+			--income: #8FBC8F;  /* 세이지 그린 */
+			--bg: #FDFCF8;      /* 따뜻한 웜 베이지 */
+			--card-shadow: 0 4px 12px rgba(0,0,0,0.05);
+		}
+		
+		body {
+			margin: 0;
+			font-family: 'Pretendard', 'Malgun Gothic', sans-serif; /* 둥글고 깔끔한 폰트 추천 */
+			background: var(--bg);
+			color: #4A4A4A;
+			padding-bottom: 80px;
+		}
+
+		header {
+			background: var(--primary);
+			color: white;
+			padding: 20px;
+			text-align: center;
+			font-weight: 600;
+			font-size: 18px;
+			position: sticky;
+			top: 0;
+			z-index: 100;
+			box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+		}
+		
+		
+        /* 탭 구조 */
+        .tab-content { display: none; padding: 15px; animation: fadeIn 0.3s; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
+        /* 카드 스타일 */
+        .card {
+			background: white;
+			padding: 16px;
+			border-radius: 20px; /* 더 둥글게 */
+			margin-bottom: 16px;
+			box-shadow: var(--card-shadow);
+		}
+        .flex-between { display: flex; justify-content: space-between; align-items: center; }
+        
+        /* 하단 네비게이션 */
+        .bottom-nav { position: fixed; bottom: 0; width: 100%; display: flex; background: white; border-top: 1px solid #eee; z-index: 90; border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+    box-shadow: 0 -4px 15px rgba(0,0,0,0.03);}
+        .nav-item { flex: 1; text-align: center; padding: 12px 0; font-size: 11px; cursor: pointer; color: #888; transition: 0.2s; }
+        .nav-item.active { color: var(--primary); font-weight: bold; }
+        .nav-item div { font-size: 18px; margin-bottom: 2px; }
+
+        /* 서브 탭 */
+        .sub-tab { display: flex; background: #eee; border-radius: 8px; margin-bottom: 15px; padding: 3px; }
+        .sub-tab-item { flex: 1; padding: 8px; text-align: center; cursor: pointer; font-size: 14px; border-radius: 6px; }
+        .sub-tab-item.active { background: white; font-weight: bold; color: var(--primary); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .sub-content { display: none; }
+        .sub-content.active { display: block; }
+
+        /* 폼 요소 */
+        input, select {
+			border: none;
+			background: #F5F5F5;
+			padding: 12px;
+			margin: 6px 0;
+			border-radius: 12px;
+			font-size: 14px;
+		}
+        button {
+			border: none;
+			border-radius: 12px;
+			background: var(--primary);
+			color: white;
+			padding: 12px;
+			font-weight: bold;
+			cursor: pointer;
+			transition: 0.3s;
+		}
+        button.danger { background: var(--expense); }
+        button.secondary { background: #6c757d; }
+
+        /* 달력 스타일 */
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; }
+        .calendar-header { font-weight: bold; color: #555; padding: 5px 0; }
+        .calendar-day { background: white; min-height: 55px; border-radius: 8px; padding: 4px; display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; position: relative; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
+        .calendar-day.empty { background: transparent; box-shadow: none; cursor: default; }
+        .calendar-day .num { font-size: 12px; font-weight: bold; text-align: left; }
+        .calendar-day .dots { display: flex; justify-content: center; gap: 2px; font-size: 10px; flex-wrap: wrap; }
+        .calendar-day.today { border: 2px solid var(--primary); }
+
+        /* 바텀 시트 */
+        .bottom-sheet { position: fixed; bottom: -100%; left: 0; width: 100%; background: white; border-top-left-radius: 20px; border-top-right-radius: 20px; box-shadow: 0 -5px 15px rgba(0,0,0,0.1); z-index: 1000; transition: bottom 0.3s ease; max-height: 70%; overflow-y: auto; box-sizing: border-box; padding: 20px; }
+        .bottom-sheet.open { bottom: 0; }
+        .sheet-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 999; display: none; }
+        .sheet-overlay.open { display: block; }
+        .sheet-close { float: right; font-size: 20px; cursor: pointer; color: #aaa; }
+
+        /* 가계부 내역 아이템 */
+        .item-list { list-style: none; padding: 0; margin: 0; }
+        .item-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; align-items: center; }
+        .item-row:last-child { border-bottom: none; }
+        .badge { padding: 4px 8px; border-radius: 8px; font-size: 10px; color: white; font-weight: bold; }
+        .badge.exp { background: var(--expense); }
+        .badge.inc { background: var(--income); }
+        .badge.plt { background: #2196F3; }
+    </style>
+</head>
+<body>
+
+    <header id="main-header">나만의 지갑 & 초록이 💰🪴</header>
+
+    <!-- 1. 달력 탭 -->
+    <div id="tab-calendar" class="tab-content active">
+        <div class="card flex-between" style="margin-bottom:10px;">
+			<button onclick="changeMonth(-1)" style="width:auto; padding:5px 15px;">◀</button>
+			<!-- 날짜 클릭 시 오늘로 가기 함수 실행 -->
+			<h3 id="calendar-month-title" onclick="goToToday()" style="margin:0; cursor:pointer;">2026년 7월</h3>
+			<button onclick="changeMonth(1)" style="width:auto; padding:5px 15px;">▶</button>
+		</div>
+        <div class="card" style="padding: 10px;">
+            <div class="calendar-grid">
+                <div class="calendar-header" style="color:red;">일</div><div class="calendar-header">월</div><div class="calendar-header">화</div><div class="calendar-header">수</div><div class="calendar-header">목</div><div class="calendar-header">금</div><div class="calendar-header" style="color:blue;">토</div>
+            </div>
+            <div id="calendar-days-grid" class="calendar-grid" style="margin-top:5px;"></div>
+        </div>
+    </div>
+
+    <!-- 2. 가계부 탭 -->
+    <div id="tab-ledger" class="tab-content">
+        <!-- 상단 월별 합계 및 필터 -->
+        <div class="card">
+            <div class="flex-between" style="font-weight:bold; font-size:15px; margin-bottom:10px;">
+                <span style="color:var(--income)">이번달 수입: <span id="total-inc-view">0</span>원</span>
+                <span style="color:var(--expense)">이번달 지출: <span id="total-exp-view">0</span>원</span>
+            </div>
+            <select id="filter-category" onchange="renderLedgerList()">
+                <option value="all">전체 카테고리 보기</option>
+            </select>
+        </div>
+
+        <!-- 입력 폼 -->
+        <div class="card">
+            <h4 style="margin:0 0 10px 0;">내역 추가</h4>
+            <div style="display:flex; gap:5px; margin-bottom:5px;">
+                <button id="btn-exp-type" onclick="setLedgerType('expense')" style="background:var(--expense)">지출</button>
+                <button id="btn-inc-type" onclick="setLedgerType('income')" style="background:#6c757d">수입</button>
+            </div>
+            <input type="date" id="ledger-date">
+            <select id="ledger-category"></select>
+            <input type="number" id="ledger-amount" placeholder="금액 입력">
+            <input type="text" id="ledger-memo" placeholder="메모 (선택)">
+            <button onclick="addTransaction()">저장하기</button>
+        </div>
+
+        <!-- 목록 -->
+        <div class="card">
+            <h4 style="margin:0 0 10px 0;">이번 달 전체 내역</h4>
+            <ul id="ledger-list" class="item-list"></ul>
+        </div>
+    </div>
+
+    <!-- 3. 식물 탭 -->
+    <div id="tab-plant" class="tab-content">
+        <div class="card">
+            <h4 style="margin:0 0 10px 0;">새 식물 등록 🪴</h4>
+            <input type="text" id="plant-name" placeholder="식물 이름">
+            <select id="plant-category-select"></select>
+            <input type="number" id="plant-interval" placeholder="물주기 주기 (며칠 마다?)">
+            <input type="date" id="plant-start-date" placeholder="마지막 물준 날짜">
+            <button onclick="addPlant()">식물 등록</button>
+        </div>
+		<div class="card"><h4 style="margin:0 0 10px 0;">식물 검색 🪴</h4>
+		<input type="text" id="plant-search" placeholder="식물 이름으로 검색..." onkeyup="renderPlantList()">
+        <div id="plant-container"></div></div>
+    </div>
+
+    <!-- 4. 통계 탭 -->
+    <div id="tab-stats" class="tab-content">
+        <div class="sub-tab">
+            <div id="sub-btn-stats-ledger" class="sub-tab-item active" onclick="switchSubTab('stats', 'ledger')">가계부 통계</div>
+            <div id="sub-btn-stats-plant" class="sub-tab-item" onclick="switchSubTab('stats', 'plant')">식물 분류</div>
+        </div>
+        
+        <div id="sub-stats-ledger" class="sub-content active">
+            <div class="card">
+                <h4 style="margin:0 0 10px 0;">이달의 카테고리별 지출 비율</h4>
+                <div style="max-width: 250px; margin: 0 auto;"><canvas id="expensePieChart"></canvas></div>
+            </div>
+        </div>
+        <div id="sub-stats-plant" class="sub-content">
+            <div class="card">
+                <h4 style="margin:0 0 10px 0;">카테고리별 식물 모아보기</h4>
+                <div id="stats-plant-group-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. 설정 탭 -->
+    <div id="tab-settings" class="tab-content">
+        <div class="sub-tab">
+            <div id="sub-btn-set-cat" class="sub-tab-item active" onclick="switchSubTab('set', 'cat')">카테고리 관리</div>
+            <div id="sub-btn-set-backup" class="sub-tab-item" onclick="switchSubTab('set', 'backup')">데이터 백업</div>
+			<div id="sub-btn-set-name" class="sub-tab-item" onclick="switchSubTab('set', 'name')">앱 설정</div>
+        </div>
+
+        <div id="sub-set-cat" class="sub-content active">
+            <div class="card">
+                <h4>가계부 카테고리 추가</h4>
+                <div style="display:flex; gap:5px;"><input type="text" id="new-ledger-cat" placeholder="예: 식비"><button onclick="addCat('ledger')" style="width:70px; margin:6px 0;">추가</button></div>
+                <ul id="settings-ledger-cats" class="item-list" style="margin-top:10px;"></ul>
+            </div>
+            <div class="card">
+                <h4>식물 카테고리 추가</h4>
+                <div style="display:flex; gap:5px;"><input type="text" id="new-plant-cat" placeholder="예: 다육이"><button onclick="addCat('plant')" style="width:70px; margin:6px 0;">추가</button></div>
+                <ul id="settings-plant-cats" class="item-list" style="margin-top:10px;"></ul>
+            </div>
+        </div>
+
+        <div id="sub-set-backup" class="sub-content">
+            <div class="card">
+                <h4>데이터 내보내기 / 가져오기</h4>
+                <p style="font-size:12px; color:#666; line-height:1.4;">스마트폰을 바꾸거나 데이터를 안전하게 보관할 때 사용하세요. 전체 내역이 파일로 저장됩니다.</p>
+                <button onclick="exportData()" style="background:#2196F3;">현재 데이터 백업 파일 다운로드</button>
+                <div style="margin-top:15px;">
+                    <label style="font-size:13px; font-weight:bold; display:block; margin-bottom:5px;">백업 파일 불러오기</label>
+                    <input type="file" id="backup-file-input" onchange="importData()" style="padding:5px;">
+                </div>
+            </div>
+        </div>
+		
+		<!-- 설정 탭의 기타(또는 백업) 하단에 추가 -->
+		<div id="sub-set-name" class="sub-content">
+			<div class="card">
+				<h4>앱 이름 변경</h4>
+				<input type="text" id="app-title-input" placeholder="새로운 이름을 입력하세요">
+				<button onclick="changeAppTitle()">이름 변경하기</button>
+			</div>
+		</div>
+    </div>
+
+    <!-- 바텀 시트 (달력 상세내역 팝업) -->
+    <div id="sheet-overlay" class="sheet-overlay" onclick="closeSheet()"></div>
+    <div id="bottom-sheet" class="bottom-sheet">
+        <span class="sheet-close" onclick="closeSheet()">✕</span>
+        <h3 id="sheet-title" style="margin-top: 0;">2026-07-20 상세 내역</h3>
+        <div id="sheet-content"></div>
+    </div>
+
+    <!-- 하단 네비게이션 바 -->
+    <div class="bottom-nav">
+        <div class="nav-item active" onclick="switchTab('calendar', this)"><div>📅</div>달력</div>
+        <div class="nav-item" onclick="switchTab('ledger', this)"><div>📋</div>가계부</div>
+        <div class="nav-item" onclick="switchTab('plant', this)"><div>🪴</div>식물</div>
+        <div class="nav-item" onclick="switchTab('stats', this)"><div>📊</div>통계</div>
+        <div class="nav-item" onclick="switchTab('settings', this)"><div>⚙️</div>설정</div>
+    </div>
+
+    <script>
+        // 시스템 날짜 기준 설정 (2026년 7월 디폴트 기동)
+        let currentDate = new Date(2026, 6, 20); 
+        let currentLedgerType = 'expense';
+        let pieChartInstance = null;
+
+        // DB구조 초기화 및 연동
+        let db = {
+            ledgerCats: JSON.parse(localStorage.getItem('ledgerCats')) || ['식비', '교통비', '쇼핑', '급여', '용돈'],
+            plantCats: JSON.parse(localStorage.getItem('plantCats')) || ['관엽식물', '다육이', '선인장'],
+            transactions: JSON.parse(localStorage.getItem('transactions')) || [],
+            plants: JSON.parse(localStorage.getItem('plants')) || []
+        };
+
+        function saveDB() {
+            localStorage.setItem('ledgerCats', JSON.stringify(db.ledgerCats));
+            localStorage.setItem('plantCats', JSON.stringify(db.plantCats));
+            localStorage.setItem('transactions', JSON.stringify(db.transactions));
+            localStorage.setItem('plants', JSON.stringify(db.plants));
+        }
+
+        // 초기 기동 세팅
+        window.onload = function() {
+			// 저장된 이름이 있으면 가져오고, 없으면 기본 이름 사용
+			const savedTitle = localStorage.getItem('appTitle');
+			if (savedTitle) {
+				document.getElementById('main-header').innerText = savedTitle;
+			}
+			
+			currentDate = new Date(); // 항상 앱을 켠 현재 날짜로 시작
+            document.getElementById('ledger-date').value = currentDate.toISOString().substring(0, 10);
+            document.getElementById('plant-start-date').value = currentDate.toISOString().substring(0, 10);
+            initSelectBoxes();
+            renderAll();
+        };
+
+        function renderAll() {
+            renderCalendar();
+            renderLedgerList();
+            renderPlantList();
+            renderCatSettings();
+            renderStats();
+        }
+
+        function initSelectBoxes() {
+			// 카테고리 셀렉트 박스 내용을 먼저 비웁니다
+            document.getElementById('ledger-category').innerHTML = '';
+            document.getElementById('filter-category').innerHTML = '<option value="all">전체 카테고리 보기</option>';
+            document.getElementById('plant-category-select').innerHTML = '';
+            // 가계부 폼 카테고리
+            let lHtml = db.ledgerCats.map(c => `<option value="${c}">${c}</option>`).join('');
+            document.getElementById('ledger-category').innerHTML = lHtml;
+            document.getElementById('filter-category').innerHTML = '<option value="all">전체 카테고리 보기</option>' + lHtml;
+            // 식물 폼 카테고리
+            let pHtml = db.plantCats.map(c => `<option value="${c}">${c}</option>`).join('');
+            document.getElementById('plant-category-select').innerHTML = pHtml;
+        }
+
+        // 메인 탭 전환
+        function switchTab(tabId, el) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.getElementById('tab-' + tabId).classList.add('active');
+            el.classList.add('active');
+            closeSheet();
+            renderAll();
+        }
+		function goToToday() {
+			currentDate = new Date(); // 오늘 날짜로 초기화
+			renderCalendar();         // 달력 다시 그리기
+		}
+        // 1. switchSubTab 함수를 아래 코드로 완전히 교체하세요.
+		function switchSubTab(main, sub) {
+			// 해당 탭 컨테이너 안의 모든 서브탭과 서브콘텐츠를 찾음
+			const container = document.getElementById('tab-' + (main === 'stats' ? 'stats' : 'settings'));
+			container.querySelectorAll('.sub-tab-item').forEach(i => i.classList.remove('active'));
+			container.querySelectorAll('.sub-content').forEach(c => c.classList.remove('active'));
+			
+			// 선택한 탭 활성화
+			document.getElementById(`sub-btn-${main}-${sub}`).classList.add('active');
+			document.getElementById(`sub-${main}-${sub}`).classList.add('active');
+		}
+
+		// 2. [설정 탭] HTML의 '카테고리 관리' 하단에 아래 코드를 추가하세요.
+		/*
+			<div id="sub-set-name" class="sub-content">
+				<div class="card">
+					<h4>앱 이름 변경</h4>
+					<input type="text" id="app-title-input" placeholder="새로운 앱 이름">
+					<button onclick="changeAppTitle()">이름 변경하기</button>
+				</div>
+			</div>
+		*/
+
+        // --- 1. 달력 기능 ---
+        function changeMonth(dir) {
+            currentDate.setMonth(currentDate.getMonth() + dir);
+            renderCalendar();
+        }
+
+        function renderCalendar() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            document.getElementById('calendar-month-title').innerText = `${year}년 ${month + 1}월`;
+
+            const firstDay = new Date(year, month, 1).getDay();
+            const lastDate = new Date(year, month + 1, 0).getDate();
+			
+			// 오늘 날짜 정보 가져오기 (매번 오늘 날짜를 계산)
+			const todayObj = new Date();
+			const todayStr = todayObj.toISOString().substring(0, 10);
+	
+            let html = '';
+
+            // 공백 칸 채우기
+            for (let i = 0; i < firstDay; i++) {
+                html += `<div class="calendar-day empty"></div>`;
+            }
+
+            // 날짜 칸 그리기
+            for (let day = 1; day <= lastDate; day++) {
+                let dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                
+                // 해당 날짜 데이터 조사
+                let hasExp = db.transactions.some(t => t.date === dateStr && t.type === 'expense');
+                let hasInc = db.transactions.some(t => t.date === dateStr && t.type === 'income');
+                
+                // 물준 날짜 조사 & 다음 물주기 예정일 계산 매칭
+                let isWatered = db.plants.some(p => p.history && p.history.includes(dateStr));
+                let isPredictWater = false;
+
+                db.plants.forEach(p => {
+                    if(p.history && p.history.length > 0) {
+                        let last = new Date(p.history[p.history.length - 1]);
+                        last.setDate(last.getDate() + parseInt(p.interval));
+                        let nextStr = last.toISOString().substring(0, 10);
+                        if(nextStr === dateStr) isPredictWater = true;
+                    }
+                });
+
+                let dotsHtml = '';
+                if(hasExp) dotsHtml += '<span style="color:var(--expense)">🔴</span>';
+                if(hasInc) dotsHtml += '<span style="color:var(--income)">🟢</span>';
+                if(isWatered) dotsHtml += '<span>💧</span>';
+                if(!isWatered && isPredictWater) dotsHtml += '<span style="opacity:0.5; filter:grayscale(50%);">💧(예정)</span>';
+
+                let isToday = (new Date().toISOString().substring(0,10) === dateStr) ? 'today' : '';
+
+                html += `
+            <div class="calendar-day ${isTodayClass}" onclick="openSheet('${dateStr}')">
+                <div class="num">${day}</div>
+                <div class="dots">
+                    ${hasExp ? '<span>🔴</span>' : ''}
+                    ${hasInc ? '<span>🟢</span>' : ''}
+                    ${isWatered ? '<span>💧</span>' : ''}
+                </div>
+            </div>
+        `;
+            }
+            document.getElementById('calendar-days-grid').innerHTML = html;
+        }
+
+        // 바텀시트 열기
+        function openSheet(dateStr) {
+            document.getElementById('sheet-title').innerText = `${dateStr} 상세 내역`;
+            
+            let dayTxs = db.transactions.filter(t => t.date === dateStr);
+            let wateredPlants = db.plants.filter(p => p.history && p.history.includes(dateStr));
+            let predictPlants = [];
+
+            db.plants.forEach(p => {
+                if(p.history && p.history.length > 0) {
+                    let last = new Date(p.history[p.history.length - 1]);
+                    last.setDate(last.getDate() + parseInt(p.interval));
+                    if(last.toISOString().substring(0, 10) === dateStr) predictPlants.push(p.name);
+                }
+            });
+
+            let html = '<ul class="item-list">';
+            
+            dayTxs.forEach(t => {
+                let sign = t.type === 'expense' ? '-' : '+';
+                let cls = t.type === 'expense' ? 'exp' : 'inc';
+                html += `
+                    <li class="item-row">
+                        <div><span class="badge ${cls}">${t.type==='expense'?'지출':'수입'}</span> <b>[${t.category}]</b> ${t.memo || ''}</div>
+                        <div style="color:var(--${t.type})">${sign}${parseInt(t.amount).toLocaleString()}원</div>
+                    </li>`;
+            });
+
+            wateredPlants.forEach(p => {
+                html += `
+                    <li class="item-row">
+                        <div><span class="badge plt">식물</span> 🪴 <b>${p.name}</b> 물 준 날</div>
+                        <div style="color:#2196F3">완료 💧</div>
+                    </li>`;
+            });
+
+            predictPlants.forEach(name => {
+                html += `
+                    <li class="item-row" style="background:#f1f8ff;">
+                        <div><span class="badge" style="background:#ff9800;">예정</span> 🪴 <b>${name}</b> 물주기 지정일</div>
+                        <div style="color:#ff9800">물주기! 예정 💧</div>
+                    </li>`;
+            });
+
+            if(dayTxs.length === 0 && wateredPlants.length === 0 && predictPlants.length === 0) {
+                html += '<p style="color:#888; text-align:center; padding:20px 0;">기록된 내역이 없습니다.</p>';
+            }
+            html += '</ul>';
+
+            document.getElementById('sheet-content').innerHTML = html;
+            document.getElementById('bottom-sheet').classList.add('open');
+            document.getElementById('sheet-overlay').classList.add('open');
+        }
+
+        function closeSheet() {
+            document.getElementById('bottom-sheet').classList.remove('open');
+            document.getElementById('sheet-overlay').classList.remove('open');
+        }
+
+
+        // --- 2. 가계부 기능 ---
+        function setLedgerType(type) {
+            currentLedgerType = type;
+            document.getElementById('btn-exp-type').style.background = type === 'expense' ? 'var(--expense)' : '#6c757d';
+            document.getElementById('btn-inc-type').style.background = type === 'income' ? 'var(--income)' : '#6c757d';
+        }
+
+        function addTransaction() {
+            let date = document.getElementById('ledger-date').value;
+            let category = document.getElementById('ledger-category').value;
+            let amount = document.getElementById('ledger-amount').value;
+            let memo = document.getElementById('ledger-memo').value;
+
+            if(!amount) return alert('금액을 입력하세요.');
+
+            db.transactions.push({
+                id: Date.now(), date, type: currentLedgerType, category, amount, memo
+            });
+            saveDB();
+            document.getElementById('ledger-amount').value = '';
+            document.getElementById('ledger-memo').value = '';
+            renderAll();
+        }
+
+        function deleteTx(id) {
+            db.transactions = db.transactions.filter(t => t.id !== id);
+            saveDB();
+            renderAll();
+        }
+
+        function renderLedgerList() {
+            let year = currentDate.getFullYear();
+            let month = String(currentDate.getMonth() + 1).padStart(2, '0');
+            let filterCat = document.getElementById('filter-category').value;
+
+            let totalExp = 0; let totalInc = 0;
+            let html = '';
+
+            // 날짜 및 필터 적용 정렬 순서
+            let filtered = db.transactions.filter(t => t.date.substring(0, 7) === `${year}-${month}`);
+            
+            // 실시간 합계 정산
+            filtered.forEach(t => {
+                if(t.type === 'expense') totalExp += parseInt(t.amount);
+                else totalInc += parseInt(t.amount);
+            });
+            document.getElementById('total-exp-view').innerText = totalExp.toLocaleString();
+            document.getElementById('total-inc-view').innerText = totalInc.toLocaleString();
+
+            // 카테고리 필터링 거르기
+            if(filterCat !== 'all') {
+                filtered = filtered.filter(t => t.category === filterCat);
+            }
+
+            filtered.sort((a,b) => b.date.localeCompare(a.date)).forEach(t => {
+                let cls = t.type === 'expense' ? 'exp' : 'inc';
+                let sign = t.type === 'expense' ? '-' : '+';
+                html += `
+                    <li class="item-row">
+                        <div>
+                            <span style="font-size:11px; color:#888; display:block;">${t.date}</span>
+                            <span class="badge ${cls}">${t.type==='expense'?'지출':'수입'}</span> <b>[${t.category}]</b> ${t.memo || ''}
+                        </div>
+                        <div class="flex-between" style="gap:10px;">
+                            <span style="font-weight:bold; color:var(--${t.type})">${sign}${parseInt(t.amount).toLocaleString()}원</span>
+                            <span onclick="deleteTx(${t.id})" style="color:#aaa; cursor:pointer; font-size:13px;">✕</span>
+                        </div>
+                    </li>`;
+            });
+
+            document.getElementById('ledger-list').innerHTML = html || '<p style="color:#888; text-align:center; padding:15px;">내역이 없습니다.</p>';
+        }
+
+
+        // --- 3. 식물 기능 ---
+        function addPlant() {
+            let name = document.getElementById('plant-name').value;
+            let category = document.getElementById('plant-category-select').value;
+            let interval = document.getElementById('plant-interval').value;
+            let startDate = document.getElementById('plant-start-date').value;
+
+            if(!name || !interval || !startDate) return alert('빈칸을 다 채워주세요!');
+
+            db.plants.push({
+                id: Date.now(), name, category, interval, history: [startDate]
+            });
+            saveDB();
+            document.getElementById('plant-name').value = '';
+            document.getElementById('plant-interval').value = '';
+            renderAll();
+        }
+
+        function waterPlant(id) {
+            let p = db.plants.find(p => p.id === id);
+            let todayStr = new Date().toISOString().substring(0, 10);
+            if(!p.history.includes(todayStr)) {
+                p.history.push(todayStr);
+                saveDB();
+                renderAll();
+            } else {
+                alert('이미 오늘 물을 주셨습니다!');
+            }
+        }
+
+        function deletePlant(id) {
+            if(confirm('이 식물을 삭제하시겠습니까?')) {
+                db.plants = db.plants.filter(p => p.id !== id);
+                saveDB();
+                renderAll();
+            }
+        }
+		
+		// 페이지 번호 상태 추가 (전역 변수)
+		let currentPage = 1;
+		const itemsPerPage = 5; // 한 페이지에 5개씩 표시
+
+        function renderPlantList() {
+			
+			let searchInput = document.getElementById('plant-search').value.toLowerCase();
+			// 페이지를 이동하는 게 아니라 검색어를 수정하는 경우에만 1페이지로 초기화
+			// 이전 검색어를 저장해둘 변수(lastSearchTerm)를 함수 외부에 하나 만듭니다
+			if (typeof lastSearchTerm === 'undefined') lastSearchTerm = "";
+			
+			if (searchInput !== lastSearchTerm) {
+				currentPage = 1;
+				lastSearchTerm = searchInput;
+			}
+	
+	
+			let searchTerms = searchInput.split(' ').filter(term => term !== "");
+			
+			// 1. 검색 필터링 (원본 db.plants 유지)
+			let filteredPlants = db.plants.filter(p => {
+				let nameAndCat = (p.name + " " + p.category).toLowerCase();
+				return searchTerms.every(term => nameAndCat.includes(term));
+			});
+			
+			// 2. 전체 페이지 수 계산
+			let totalPages = Math.max(1, Math.ceil(filteredPlants.length / itemsPerPage));
+			
+			// 페이지 범위 체크 (범위 벗어나지 않게)
+			if (currentPage > totalPages) currentPage = totalPages;
+			if (currentPage < 1) currentPage = 1;
+			
+			// 3. 현재 페이지 데이터만 슬라이싱
+			let startIndex = (currentPage - 1) * itemsPerPage;
+			let paginatedPlants = filteredPlants.slice(startIndex, startIndex + itemsPerPage);
+			
+			let html = '';
+			
+			// 4. 카드 렌더링
+			paginatedPlants.forEach(p => {
+				let lastWatered = p.history[p.history.length - 1];
+				let next = new Date(lastWatered);
+				next.setDate(next.getDate() + parseInt(p.interval));
+				let nextStr = next.toISOString().substring(0, 10);
+				let diff = Math.ceil((next - new Date()) / (1000 * 60 * 60 * 24));
+				let dDayText = diff === 0 ? "🔥 오늘 물주는 날!" : (diff > 0 ? `⏰ D-${diff}` : `⚠️ 물줄 때 지남 (${Math.abs(diff)}일 연장됨)`);
+
+				html += `
+					<div class="card">
+						<div class="flex-between">
+							<h4 style="margin:0;">🪴 ${p.name} <span style="font-weight:normal; font-size:12px; color:#777;">(${p.category})</span></h4>
+							<span onclick="deletePlant(${p.id})" style="color:#ccc; cursor:pointer;">✕</span>
+						</div>
+						<div style="font-size:13px; color:#555; margin:8px 0; line-height:1.5;">
+							마지막 급수일: ${lastWatered}<br>
+							<b>다음 예정일: ${nextStr} (<span style="color:var(--expense)">${dDayText}</span>)</b><br>
+							설정된 주기: ${p.interval}일 마다
+						</div>
+						<button onclick="waterPlant(${p.id})" style="background:#2196F3; padding:8px;">💧 오늘 물 줬음!</button>
+					</div>`;
+			});
+			
+			// 5. 페이징 버튼 (상태 표시 및 버튼 활성화)
+			html += `
+				<div class="flex-between" style="padding:10px;">
+					<button onclick="changePage(-1)" style="width:40%;" ${currentPage === 1 ? 'disabled' : ''}>이전</button>
+					<span style="font-weight:bold;">${currentPage} / ${totalPages}</span>
+					<button onclick="changePage(1)" style="width:40%;" ${currentPage === totalPages ? 'disabled' : ''}>다음</button>
+				</div>
+			`;
+			
+			document.getElementById('plant-container').innerHTML = html || '<p style="color:#888; text-align:center; padding:20px;">등록된 식물이 없습니다.</p>';
+		}
+
+		function changePage(dir) {
+			currentPage += dir;
+			renderPlantList();
+		}
+
+
+        // --- 4. 통계 기능 ---
+        function renderStats() {
+            let year = currentDate.getFullYear();
+            let month = String(currentDate.getMonth() + 1).padStart(2, '0');
+            let currentYM = `${year}-${month}`;
+
+            // 1. 가계부 파이 차트 가공
+            let expData = {};
+            db.transactions.filter(t => t.date.substring(0,7) === currentYM && t.type === 'expense').forEach(t => {
+                expData[t.category] = (expData[t.category] || 0) + parseInt(t.amount);
+            });
+
+            let labels = Object.keys(expData);
+            let values = Object.values(expData);
+
+            if(pieChartInstance) pieChartInstance.destroy();
+
+            if(labels.length > 0) {
+                let ctx = document.getElementById('expensePieChart').getContext('2d');
+                pieChartInstance = new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: values,
+                            backgroundColor: ['#ff4444', '#ffbb33', '#00C851', '#33b5e5', '#aa66cc', '#2196F3']
+                        }]
+                    },
+                    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+                });
+            } else {
+                document.getElementById('expensePieChart').innerHTML = '이달의 지출 내역이 없어 통계를 낼 수 없습니다.';
+            }
+
+            // 2. 식물 카테고리별 모아보기 리스트 가공
+            let groupHtml = '';
+            db.plantCats.forEach(cat => {
+                let pInCat = db.plants.filter(p => p.category === cat);
+                groupHtml += `<div style="margin-bottom:10px;"><b>📁 ${cat} (${pInCat.length}개)</b>`;
+                if(pInCat.length > 0) {
+                    groupHtml += `<div style="padding-left:15px; color:#555; font-size:13px; margin-top:3px;">${pInCat.map(p => '🪴 '+p.name).join(', ')}</div>`;
+                } else {
+                    groupHtml += `<div style="padding-left:15px; color:#aaa; font-size:12px;">등록된 식물 없음</div>`;
+                }
+                groupHtml += `</div>`;
+            });
+            document.getElementById('stats-plant-group-list').innerHTML = groupHtml;
+        }
+
+
+        // --- 5. 카테고리 설정 및 백업 백엔드 ---
+        function addCat(type) {
+            if(type === 'ledger') {
+                let val = document.getElementById('new-ledger-cat').value.trim();
+                if(val && !db.ledgerCats.includes(val)) { db.ledgerCats.push(val); document.getElementById('new-ledger-cat').value=''; }
+            } else {
+                let val = document.getElementById('new-plant-cat').value.trim();
+                if(val && !db.plantCats.includes(val)) { db.plantCats.push(val); document.getElementById('new-plant-cat').value=''; }
+            }
+            saveDB(); initSelectBoxes(); renderAll();
+        }
+
+        function deleteCat(type, name) {
+            if(type === 'ledger') db.ledgerCats = db.ledgerCats.filter(c => c !== name);
+            else db.plantCats = db.plantCats.filter(c => c !== name);
+            saveDB(); initSelectBoxes(); renderAll();
+        }
+
+        function renderCatSettings() {
+            document.getElementById('settings-ledger-cats').innerHTML = db.ledgerCats.map(c => `
+                <li class="item-row"><span>${c}</span><span onclick="deleteCat('ledger', '${c}')" style="color:var(--expense); cursor:pointer; font-size:12px;">삭제</span></li>
+            `).join('');
+
+            document.getElementById('settings-plant-cats').innerHTML = db.plantCats.map(c => `
+                <li class="item-row"><span>${c}</span><span onclick="deleteCat('plant', '${c}')" style="color:var(--expense); cursor:pointer; font-size:12px;">삭제</span></li>
+            `).join('');
+        }
+
+        // 데이터 전체 파일로 저장 (백업)
+        function exportData() {
+            let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db));
+            let downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `wallet_plant_backup_2026.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        // 백업 파일 읽어와 복원 (가져오기)
+        function importData() {
+            const fileInput = document.getElementById('backup-file-input');
+            if(fileInput.files.length === 0) return;
+            
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    let imported = JSON.parse(e.target.result);
+                    if(imported.ledgerCats && imported.transactions && imported.plants) {
+                        db = imported;
+                        saveDB();
+                        initSelectBoxes();
+                        renderAll();
+                        alert('데이터 복원이 성공적으로 완료되었습니다! 🎉');
+                    } else {
+                        alert('올바른 백업 파일 형식이 아닙니다.');
+                    }
+                } catch(err) {
+                    alert('파일을 읽는 중 오류가 발생했습니다.');
+                }
+            };
+            reader.readAsText(file);
+        }
+		
+		// --- 수정된 달력 렌더링 로직 ---
+		function renderCalendar() {
+			const year = currentDate.getFullYear();
+			const month = currentDate.getMonth();
+			document.getElementById('calendar-month-title').innerText = `${year}년 ${month + 1}월`;
+
+			const firstDay = new Date(year, month, 1).getDay();
+			const lastDate = new Date(year, month + 1, 0).getDate();
+			
+			// 오늘 날짜 정보 가져오기 (매번 오늘 날짜를 계산)
+			const todayObj = new Date();
+			const todayStr = todayObj.toISOString().substring(0, 10);
+			
+			let html = '';
+
+			for (let i = 0; i < firstDay; i++) {
+				html += `<div class="calendar-day empty"></div>`;
+			}
+
+			for (let day = 1; day <= lastDate; day++) {
+				let dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+				
+				// ... (아이콘 로직은 동일) ...
+				let hasExp = db.transactions.some(t => t.date === dateStr && t.type === 'expense');
+				let hasInc = db.transactions.some(t => t.date === dateStr && t.type === 'income');
+				let isWatered = db.plants.some(p => p.history && p.history.includes(dateStr));
+				
+				// 오늘 날짜 여부 체크 (테두리 강조)
+				let isTodayClass = (dateStr === todayStr) ? 'today' : '';
+
+				html += `
+					<div class="calendar-day ${isTodayClass}" onclick="openSheet('${dateStr}')">
+						<div class="num">${day}</div>
+						<div class="dots">
+							${hasExp ? '<span>🔴</span>' : ''}
+							${hasInc ? '<span>🟢</span>' : ''}
+							${isWatered ? '<span>💧</span>' : ''}
+						</div>
+					</div>
+				`;
+			}
+			document.getElementById('calendar-days-grid').innerHTML = html;
+		}
+		
+		
+		function changeAppTitle() {
+			let newTitle = document.getElementById('app-title-input').value;
+			if(newTitle) {
+				document.getElementById('main-header').innerText = newTitle;
+				localStorage.setItem('appTitle', newTitle);
+				alert('앱 이름이 변경되었습니다! 🎉');
+			} else {
+				alert('이름을 입력해주세요.');
+			}
+		}
+
+
+    </script>
+</body>
+</html>
