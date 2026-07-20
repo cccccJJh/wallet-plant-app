@@ -162,9 +162,10 @@
             </div>
             <input type="date" id="ledger-date">
             <select id="ledger-category"></select>
-            <input type="number" id="ledger-amount" placeholder="금액 입력">
+            <input type="text" id="ledger-amount" placeholder="금액 입력" oninput="formatAmount(this)">
             <input type="text" id="ledger-memo" placeholder="메모 (선택)">
-            <button onclick="addTransaction()">저장하기</button>
+            <button id="btn-save" onclick="handleSave()">저장하기</button>
+			<button id="btn-cancel" onclick="cancelEdit()" style="display:none; background:#6c757d; margin-top:5px;">수정 취소 (신규 저장)</button>
         </div>
 
         <!-- 목록 -->
@@ -271,6 +272,7 @@
     </div>
 
     <script>
+		
         // 시스템 날짜 기준 설정 (2026년 7월 디폴트 기동)
         let currentDate = new Date(2026, 6, 20); 
         let currentLedgerType = 'expense';
@@ -502,8 +504,12 @@
         function addTransaction() {
             let date = document.getElementById('ledger-date').value;
             let category = document.getElementById('ledger-category').value;
-            let amount = document.getElementById('ledger-amount').value;
-            let memo = document.getElementById('ledger-memo').value;
+            //let amount = document.getElementById('ledger-amount').value;
+            // 쉼표 제거 후 정수 변환
+			let amountStr = document.getElementById('ledger-amount').value;
+			let amount = parseInt(amountStr.replace(/,/g, ''));
+			if(isNaN(amount)) return alert('금액을 정확히 입력해주세요.');
+			let memo = document.getElementById('ledger-memo').value;
 
             if(!amount) return alert('금액을 입력하세요.');
 
@@ -550,17 +556,17 @@
                 let cls = t.type === 'expense' ? 'exp' : 'inc';
                 let sign = t.type === 'expense' ? '-' : '+';
                 html += `
-                    <li class="item-row">
-                        <div>
-                            <span style="font-size:11px; color:#888; display:block;">${t.date}</span>
-                            <span class="badge ${cls}">${t.type==='expense'?'지출':'수입'}</span> <b>[${t.category}]</b> ${t.memo || ''}
-                        </div>
-                        <div class="flex-between" style="gap:10px;">
-                            <span style="font-weight:bold; color:var(--${t.type})">${sign}${parseInt(t.amount).toLocaleString()}원</span>
-                            <span onclick="deleteTx(${t.id})" style="color:#aaa; cursor:pointer; font-size:13px;">✕</span>
-                        </div>
-                    </li>`;
-            });
+				<li class="item-row" onclick="loadToForm(${t.id})" style="cursor:pointer;">
+					<div>
+						<span style="font-size:11px; color:#888; display:block;">${t.date}</span>
+						<span class="badge ${cls}">${t.type==='expense'?'지출':'수입'}</span> <b>[${t.category}]</b> ${t.memo || ''}
+					</div>
+					<div class="flex-between" style="gap:10px;">
+						<span style="font-weight:bold; color:var(--${t.type})">${sign}${parseInt(t.amount).toLocaleString()}원</span>
+						<span onclick="event.stopPropagation(); deleteTx(${t.id})" style="color:#aaa; cursor:pointer; font-size:13px;">✕</span>
+					</div>
+				</li>`;
+		});
 
             document.getElementById('ledger-list').innerHTML = html || '<p style="color:#888; text-align:center; padding:15px;">내역이 없습니다.</p>';
         }
@@ -854,7 +860,91 @@
 				alert('이름을 입력해주세요.');
 			}
 		}
+		// 현재 수정 중인 데이터의 ID를 저장할 변수
+		let editingId = null;
 
+		function loadToForm(id) {
+			const t = db.transactions.find(item => item.id === id);
+			if (!t) return;
+			
+			editingId = id; // 수정 모드 진입
+			
+			// 폼에 값 채우기
+			document.getElementById('ledger-date').value = t.date;
+			document.getElementById('ledger-category').value = t.category;
+			document.getElementById('ledger-amount').value = t.amount.toLocaleString(); // 쉼표 표시
+			document.getElementById('ledger-memo').value = t.memo;
+			
+			// 지출/수입 타입 버튼 상태 업데이트
+			setLedgerType(t.type);
+			
+			// 버튼 텍스트 변경
+			//const saveBtn = document.querySelector('button[onclick="addTransaction()"]');
+			//saveBtn.innerText = "수정 완료";
+			document.getElementById('btn-save').innerText = "수정 완료";
+			document.getElementById('btn-cancel').style.display = "block"; // 취소 버튼 보이기
+			//saveBtn.setAttribute("onclick", "updateTransaction()");
+			
+			window.scrollTo(0, 0);
+		}
+		function handleSave() {
+			if (editingId) {
+				// 수정 모드일 때
+				updateTransaction();
+				document.getElementById('btn-cancel').style.display = "none";
+    document.getElementById('btn-save').innerText = "저장하기";
+			} else {
+				// 추가 모드일 때
+				addTransaction();
+			}
+		}
+		
+		//수정 취소 함수 (신규 저장 모드로 복귀)
+		function cancelEdit() {
+			editingId = null; // 수정 모드 해제
+			
+			// 폼 초기화
+			document.getElementById('ledger-date').value = new Date().toISOString().substring(0, 10);
+			document.getElementById('ledger-category').selectedIndex = 0;
+			document.getElementById('ledger-amount').value = '';
+			document.getElementById('ledger-memo').value = '';
+			
+			// 버튼 원래대로 복구
+			document.getElementById('btn-save').innerText = "저장하기";
+			document.getElementById('btn-cancel').style.display = "none"; // 취소 버튼 숨기기
+		}
+
+		//수정 완료 함수 추가
+		function updateTransaction() {
+			const t = db.transactions.find(item => item.id === editingId);
+			if (t) {
+				t.date = document.getElementById('ledger-date').value;
+				t.category = document.getElementById('ledger-category').value;
+				t.amount = parseInt(document.getElementById('ledger-amount').value.replace(/,/g, ''));
+				t.memo = document.getElementById('ledger-memo').value;
+				t.type = currentLedgerType;
+			}
+
+			saveDB();
+			
+			// 초기화
+			editingId = null;
+			document.getElementById('btn-save').innerText = "저장하기";
+			document.getElementById('ledger-amount').value = '';
+			document.getElementById('ledger-memo').value = '';
+			renderAll();
+		}
+		
+		function formatAmount(input) {
+			/// 쉼표를 모두 제거하고 순수 숫자만 추출
+			let value = input.value.replace(/,/g, '');
+			
+			// 숫자가 아니면 빈칸 처리
+			if (isNaN(value)) return;
+			
+			// 3자리마다 쉼표 추가
+			input.value = value.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+		}
 
     </script>
 </body>
