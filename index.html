@@ -118,6 +118,16 @@
         .badge.exp { background: var(--expense); }
         .badge.inc { background: var(--income); }
         .badge.plt { background: #2196F3; }
+		
+		/* 노션 스타일 표 (Table) 디자인 */
+        .notion-wrapper { overflow-x: auto; white-space: nowrap; border: 1px solid #eee; border-radius: 8px; margin-top: 10px; background: white; }
+        .notion-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; min-width: 700px; }
+        .notion-table th { background: #f7f7f5; color: #777; font-weight: normal; padding: 10px 12px; border-bottom: 1px solid #eee; position: sticky; top: 0; }
+        .notion-table td { padding: 10px 12px; border-bottom: 1px solid #eee; vertical-align: middle; }
+        .notion-table tr:hover { background: #f9f9f9; }
+        .notion-tag { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 11px; background: #e8f4fd; color: #0e7fb3; }
+        .notion-tag.green { background: #e6f4ea; color: #1e8e3e; }
+        .notion-tag.gray { background: #f1f3f4; color: #5f6368; }
     </style>
 </head>
 <body>
@@ -186,30 +196,41 @@
     <!-- 3. 식물 탭 -->
     <div id="tab-plant" class="tab-content">
         <div class="card">
-					<h4 style="margin:0 0 10px 0;">새 식물 등록 🪴</h4>
-					<div style="margin-bottom: 8px;">
-					<input type="text" id="plant-name" placeholder="식물 이름" style="width: 100%; box-sizing: border-box;">
-				</div>
-				
-				<div style="margin-bottom: 8px;">
-					<select id="plant-category-select" style="width: 100%; box-sizing: border-box;"></select>
-				</div>
-				
-				<div style="margin-bottom: 8px;">
-					<input type="number" id="plant-interval" placeholder="물주기 주기 (며칠 마다? 숫자만)" style="width: 100%; box-sizing: border-box;">
-				</div>
-				
-				<div style="margin-bottom: 8px;">
-					<label style="font-size: 12px; color: #666; display: block; margin-bottom: 2px;">집에 온 날 (입양일)</label>
-					<input type="date" id="plant-created-date" style="width: 100%; box-sizing: border-box;">
-				</div>
-				
-				<div style="margin-bottom: 12px;">
-					<label style="font-size: 12px; color: #666; display: block; margin-bottom: 2px;">마지막 물 준 날짜</label>
-					<input type="date" id="plant-start-date" style="width: 100%; box-sizing: border-box;">
-				</div>		
-					<button onclick="addPlant()">식물 등록</button>
-				</div>
+            <h4 style="margin:0 0 10px 0;">새 식물 등록 🪴 (노션 스타일)</h4>
+            <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                <input type="text" id="plant-name" placeholder="식물 이름 (예: 무늬몬스테라)" style="flex: 1; box-sizing: border-box;">
+                <select id="plant-category-select" style="flex: 1; box-sizing: border-box;"></select>
+            </div>
+            
+            <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                <select id="plant-status" style="flex: 1; box-sizing: border-box;">
+                    <option value="🟢 건강">🟢 건강</option>
+                    <option value="🟡 요양중">🟡 요양중</option>
+                    <option value="🔴 주의">🔴 주의</option>
+                    <option value="❌ RIP">❌ RIP</option>
+                </select>
+                <input type="text" id="plant-location" placeholder="위치 (예: 거실 선반)" style="flex: 1; box-sizing: border-box;">
+            </div>
+
+            <div style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
+                <input type="number" id="plant-interval" placeholder="물주기 주기(일)" style="flex: 1; box-sizing: border-box;">
+                <label style="flex: 1; font-size: 13px; display: flex; align-items: center; gap: 5px;">
+                    <input type="checkbox" id="plant-greenhouse" style="width: auto; margin: 0;"> 온실 여부
+                </label>
+            </div>
+            
+            <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                <div style="flex: 1;">
+                    <label style="font-size: 11px; color: #666; display: block; margin-bottom: 2px;">입수일 (집에 온 날)</label>
+                    <input type="date" id="plant-created-date" style="width: 100%; box-sizing: border-box;">
+                </div>
+                <div style="flex: 1;">
+                    <label style="font-size: 11px; color: #666; display: block; margin-bottom: 2px;">마지막 급수일</label>
+                    <input type="date" id="plant-start-date" style="width: 100%; box-sizing: border-box;">
+                </div>
+            </div>      
+            <button onclick="addPlant()" style="width: 100%;">식물 등록</button>
+        </div>
 		<div class="card"><h4 style="margin:0 0 10px 0;">식물 검색 🪴</h4>
 		<input type="text" id="plant-search" placeholder="식물 이름으로 검색..." onkeyup="renderPlantList()">
         <div id="plant-container"></div></div>
@@ -672,6 +693,8 @@ function openSheet(dateStr) {
         function closeSheet() {
             document.getElementById('bottom-sheet').classList.remove('open');
             document.getElementById('sheet-overlay').classList.remove('open');
+			// 💡 팝업이 닫힐 때 바탕화면 스크롤 잠금 해제
+			document.body.style.overflow = '';
         }
 
 
@@ -803,23 +826,142 @@ function openSheet(dateStr) {
 
 
         // --- 3. 식물 기능 ---
-        function addPlant() {
-            let name = document.getElementById('plant-name').value;
-            let category = document.getElementById('plant-category-select').value;
-            let interval = document.getElementById('plant-interval').value;
-			let createdAt = document.getElementById('plant-created-date').value; // 집에 온 날
-            let startDate = document.getElementById('plant-start-date').value;
+        // --- 식물 등록 함수 (노션 속성 추가) ---
+function addPlant() {
+    let name = document.getElementById('plant-name').value;
+    let category = document.getElementById('plant-category-select').value;
+    let interval = document.getElementById('plant-interval').value;
+    let createdAt = document.getElementById('plant-created-date').value;
+    let startDate = document.getElementById('plant-start-date').value;
+    
+    // 새로 추가된 노션 스타일 속성들
+    let status = document.getElementById('plant-status') ? document.getElementById('plant-status').value : '🟢 건강';
+    let location = document.getElementById('plant-location') ? document.getElementById('plant-location').value : '';
+    let greenhouse = document.getElementById('plant-greenhouse') ? document.getElementById('plant-greenhouse').checked : false;
 
-            if(!name || !interval || !startDate || !createdAt) return alert('빈칸을 다 채워주세요!');
+    if(!name || !interval || !startDate || !createdAt) return alert('필수 빈칸을 다 채워주세요!');
 
-            db.plants.push({
-                id: Date.now(), name, category, interval, createdAt: createdAt, history: [startDate]
-            });
-            saveDB();
-            document.getElementById('plant-name').value = '';
-            document.getElementById('plant-interval').value = '';
-            renderAll();
-        }
+    db.plants.push({
+        id: Date.now(), 
+        name, 
+        category, 
+        interval, 
+        createdAt: createdAt, 
+        history: [startDate],
+        status: status,
+        location: location,
+        greenhouse: greenhouse
+    });
+    saveDB();
+    document.getElementById('plant-name').value = '';
+    document.getElementById('plant-interval').value = '';
+    if(document.getElementById('plant-location')) document.getElementById('plant-location').value = '';
+    if(document.getElementById('plant-greenhouse')) document.getElementById('plant-greenhouse').checked = false;
+    renderAll();
+}
+
+// --- 식물 리스트 렌더링 함수 (노션 표 스타일로 완전히 변경) ---
+function renderPlantList() {
+    let searchInput = document.getElementById('plant-search').value.toLowerCase();
+    
+    if (typeof window.lastSearchTerm === 'undefined') window.lastSearchTerm = "";
+    if (searchInput !== window.lastSearchTerm) {
+        currentPage = 1;
+        window.lastSearchTerm = searchInput;
+    }
+
+    let searchTerms = searchInput.split(' ').filter(term => term !== "");
+    
+    let filteredPlants = db.plants.filter(p => {
+        let nameAndCat = (p.name + " " + p.category).toLowerCase();
+        return searchTerms.every(term => nameAndCat.includes(term));
+    });
+    
+    let totalPages = Math.max(1, Math.ceil(filteredPlants.length / itemsPerPage));
+    if (currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+    
+    let startIndex = (currentPage - 1) * itemsPerPage;
+    let paginatedPlants = filteredPlants.slice(startIndex, startIndex + itemsPerPage);
+    
+    let todayStr = new Date().toISOString().substring(0, 10);
+    
+    // 표 시작 (thead)
+    let html = `
+        <div class="notion-wrapper">
+            <table class="notion-table">
+                <thead>
+                    <tr>
+                        <th>Aa 이름</th>
+                        <th>○ 분류</th>
+                        <th>☼ 상태</th>
+                        <th>📅 입수일</th>
+                        <th>◎ 위치</th>
+                        <th>☑ 온실</th>
+                        <th>💧 물주기 관리</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+    
+    // 데이터 행 (tbody) 렌더링
+    if(paginatedPlants.length === 0) {
+        html += `<tr><td colspan="8" style="text-align:center; color:#888; padding:20px;">등록된 식물이 없습니다.</td></tr>`;
+    } else {
+        paginatedPlants.forEach(p => {
+            let lastWatered = (p.history && p.history.length > 0) ? p.history[p.history.length - 1] : p.createdAt;
+            let next = new Date(lastWatered);
+            next.setDate(next.getDate() + parseInt(p.interval));
+            let nextStr = next.toISOString().substring(0, 10);
+            
+            let today = new Date();
+            let diff = Math.ceil((new Date(nextStr) - new Date(today.toISOString().substring(0,10))) / (1000 * 60 * 60 * 24));
+            
+            let adoptedDate = p.createdAt || (p.history ? p.history[0] : '');
+            let status = p.status || '🟢 건강';
+            let loc = p.location || '';
+            let isGreenhouse = p.greenhouse ? '☑' : '☐';
+
+            // 물주기 버튼 상태 로직 (이전 수정본 유지)
+            let buttonHtml = '';
+            if (lastWatered === todayStr) {
+                buttonHtml = `<span style="color:#aaa; font-size:11px; font-weight:bold;">✨ 오늘 완료</span>`;
+            } else if (diff <= 2) {
+                buttonHtml = `<button onclick="waterPlant(${p.id})" style="background:#2196F3; color:white; border:none; border-radius:4px; padding:6px 10px; cursor:pointer; font-size:11px; font-weight:bold;">방금 물 줬어요</button>`;
+            } else {
+                buttonHtml = `<span style="color:#adb5bd; font-size:11px;">D-${diff}</span>`;
+            }
+
+            html += `
+                <tr>
+                    <td style="font-weight:bold; color:#333;">📄 ${p.name}</td>
+                    <td><span class="notion-tag">${p.category}</span></td>
+                    <td><span class="notion-tag gray">${status}</span></td>
+                    <td style="color:#555;">${adoptedDate}</td>
+                    <td>${loc ? `<span class="notion-tag green">${loc}</span>` : ''}</td>
+                    <td style="text-align:center; color:#666;">${isGreenhouse}</td>
+                    <td>${buttonHtml}</td>
+                    <td><span onclick="deletePlant(${p.id})" style="color:#ccc; cursor:pointer; font-size:12px;">✕</span></td>
+                </tr>
+            `;
+        });
+    }
+
+    html += `</tbody></table></div>`; 
+	// 표 종료
+
+    // 페이징 버튼
+    html += `
+        <div class="flex-between" style="padding:15px 5px 5px 5px;">
+            <button onclick="changePage(-1)" style="padding: 6px 12px; font-size: 12px; background: white; color: #333; border: 1px solid #ccc;" ${currentPage === 1 ? 'disabled' : ''}>이전</button>
+            <span style="font-size:12px; color:#555;">${currentPage} / ${totalPages}</span>
+            <button onclick="changePage(1)" style="padding: 6px 12px; font-size: 12px; background: white; color: #333; border: 1px solid #ccc;" ${currentPage === totalPages ? 'disabled' : ''}>다음</button>
+        </div>
+    `;
+    
+    document.getElementById('plant-container').innerHTML = html;
+}
 
         function waterPlant(id) {
             let p = db.plants.find(p => p.id === id);
@@ -914,11 +1056,13 @@ function renderPlantList() {
                 </button>`;
         }
 
+       // 💡 카드를 클릭하면 openPlantDetail 함수가 실행되도록 onclick 추가
         html += `
-            <div class="card">
+            <div class="card" onclick="openPlantDetail(${p.id})" style="cursor:pointer; transition: 0.2s;">
                 <div class="flex-between">
                     <h4 style="margin:0;">🪴 ${p.name} <span style="font-weight:normal; font-size:12px; color:#777;">(${p.category})</span></h4>
-                    <span onclick="deletePlant(${p.id})" style="color:#ccc; cursor:pointer; padding:5px;">✕</span>
+                    <!-- 💡 삭제 버튼 클릭 시 팝업이 같이 뜨는 것을 막기 위해 event.stopPropagation() 추가 -->
+                    <span onclick="event.stopPropagation(); deletePlant(${p.id})" style="color:#ccc; cursor:pointer; padding:5px;">✕</span>
                 </div>
                 <div style="font-size:13px; color:#555; margin:8px 0; line-height:1.5;">
                     🏡 집에 온 날: <b>${adoptedDate}</b><br>
@@ -926,7 +1070,8 @@ function renderPlantList() {
                     <b>다음 예정일: ${nextStr} (<span style="color:var(--expense)">${dDayText}</span>)</b><br>
                     설정된 주기: ${p.interval}일 마다
                 </div>
-                ${buttonHtml}
+                <!-- 💡 물주기 버튼 클릭 시 팝업이 같이 뜨는 것을 막기 위해 event.stopPropagation() 추가된 버튼들 -->
+                ${buttonHtml.replace(/onclick="/g, 'onclick="event.stopPropagation(); ')}
             </div>`;
     });
 
@@ -1270,6 +1415,74 @@ function renderPlantList() {
 				document.execCommand('copy');
 				alert('텍스트가 복사되었습니다!');
 			}
+		}
+		
+		// 카드를 클릭했을 때 식물 상세 정보를 팝업으로 띄우는 함수
+		function openPlantDetail(id) {
+			let p = db.plants.find(item => item.id === id);
+			if(!p) return;
+
+			let lastWatered = (p.history && p.history.length > 0) ? p.history[p.history.length - 1] : p.createdAt;
+			let next = new Date(lastWatered);
+			next.setDate(next.getDate() + parseInt(p.interval));
+			let nextStr = next.toISOString().substring(0, 10);
+			
+			// 저장된 노션 스타일 속성 불러오기 (없으면 기본값 처리)
+			let status = p.status || '🟢 상태 미지정';
+			let location = p.location || '위치 미지정';
+			let greenhouse = p.greenhouse ? '☑ 예' : '☐ 아니오';
+			let adoptedDate = p.createdAt || (p.history ? p.history[0] : '정보 없음');
+
+			// 팝업 제목 설정
+			document.getElementById('sheet-title').innerText = `🪴 ${p.name} 상세 정보`;
+			
+			// 팝업 내용(HTML) 구성
+			let html = `
+				<ul class="item-list" style="font-size:14px; line-height:2.0;">
+					<li class="item-row" style="display:flex; justify-content:space-between;">
+						<span style="color:#666;">식물 분류</span>
+						<b>${p.category}</b>
+					</li>
+					<li class="item-row" style="display:flex; justify-content:space-between;">
+						<span style="color:#666;">건강 상태</span>
+						<b>${status}</b>
+					</li>
+					<li class="item-row" style="display:flex; justify-content:space-between;">
+						<span style="color:#666;">현재 위치</span>
+						<b>${location}</b>
+					</li>
+					<li class="item-row" style="display:flex; justify-content:space-between;">
+						<span style="color:#666;">온실 여부</span>
+						<b>${greenhouse}</b>
+					</li>
+					<li class="item-row" style="display:flex; justify-content:space-between;">
+						<span style="color:#666;">물주기 주기</span>
+						<b>${p.interval}일 마다</b>
+					</li>
+					<li class="item-row" style="display:flex; justify-content:space-between;">
+						<span style="color:#666;">입수일 (집에 온 날)</span>
+						<b>${adoptedDate}</b>
+					</li>
+					<li class="item-row" style="display:flex; justify-content:space-between;">
+						<span style="color:#666;">마지막 물 준 날</span>
+						<b>${lastWatered}</b>
+					</li>
+					<li class="item-row" style="display:flex; justify-content:space-between; border-bottom:none;">
+						<span style="color:#666;">다음 물주기 예정일</span>
+						<b style="color:var(--expense);">${nextStr}</b>
+					</li>
+				</ul>
+				<div style="margin-top:15px;">
+					<button onclick="closeSheet()" style="width:100%; background:#6c757d; color:white; padding:12px; border-radius:12px; border:none; font-weight:bold; cursor:pointer;">닫기</button>
+				</div>
+			`;
+			
+			document.getElementById('sheet-content').innerHTML = html;
+			document.getElementById('bottom-sheet').classList.add('open');
+			document.getElementById('sheet-overlay').classList.add('open');
+			
+			// 💡 팝업이 열릴 때 바탕화면 스크롤 잠금
+    document.body.style.overflow = 'hidden';
 		}
     </script>
 </body>
