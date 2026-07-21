@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>가계부 & 식물 관리 마스터</title>
+    <title>식물 관리 마스터</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
@@ -107,7 +107,7 @@
 </head>
 <body>
 
-    <header id="main-header">나만의 지갑 & 초록이 💰🪴</header>
+    <header id="main-header">초록이🪴</header>
 
     <!-- 1. 달력 탭 -->
     <div id="tab-calendar" class="tab-content active">
@@ -143,7 +143,7 @@
             </div>
             <div>
                 <select id="finance-category-filter" onchange="renderLedgerList()" style="width: 100%; margin:0;">
-                    <option value="all">📂 전체 카테고리 보기 (필터 없음)</option>
+                    <option value="all">📂 전체 카테고리</option>
                 </select>
             </div>
         </div>
@@ -193,7 +193,7 @@
                     <option value="💰 판매 완료">💰 판매 완료</option>
                     <option value="🌿 삽수">🌿 삽수</option>
                 </select>
-                <input type="text" id="plant-location" placeholder="위치 (예: 거실바닥)" style="flex: 1; box-sizing: border-box; margin:0;">
+                <input type="text" id="plant-location" placeholder="위치 (예: 선반1)" style="flex: 1; box-sizing: border-box; margin:0;">
             </div>
 
             <div style="display: flex; gap: 8px; margin-bottom: 8px;">
@@ -404,7 +404,7 @@
             let filterEl = document.getElementById('finance-category-filter');
             if (filterEl) {
                 let currentVal = filterEl.value;
-                let filterHtml = `<option value="all">📂 전체 카테고리 보기 (필터 없음)</option>`;
+                let filterHtml = `<option value="all">📂 전체 카테고리</option>`;
                 filterHtml += sortedLedgerCats.map(c => `<option value="${c}">${c}</option>`).join('');
                 filterEl.innerHTML = filterHtml;
                 filterEl.value = currentVal || 'all';
@@ -768,7 +768,7 @@
             if (!selectElement) return;
 
             let locations = [...new Set(db.plants.map(p => p.location).filter(loc => loc && loc.trim() !== ''))].sort((a, b) => a.localeCompare(b, 'ko'));
-            let html = `<option value="all">🌍 위치 전체보기 (${db.plants.length}개)</option>`;
+            let html = `<option value="all">🌍 전체 (${db.plants.length}개)</option>`;
             locations.forEach(loc => {
                 let count = db.plants.filter(p => p.location === loc).length;
                 let isSelected = currentLocationFilter === loc ? 'selected' : '';
@@ -808,7 +808,6 @@
         function renderLedgerList() {
             let selectedCategory = document.getElementById('finance-category-filter').value;
             
-            // 💡 선택한 년월(YYYY-MM) 타이틀 텍스트 실시간 반영 (예: 2026년 7월 요약)
             if (currentFinanceMonth) {
                 let parts = currentFinanceMonth.split('-');
                 if (parts.length === 2) {
@@ -883,20 +882,48 @@
             if(!file) return;
             let reader = new FileReader();
             reader.onload = function(e) {
-                db = JSON.parse(e.target.result);
-                saveDB(); renderAll(); alert('복원 완료!');
+                try {
+                    let parsed = JSON.parse(e.target.result);
+                    processImportedData(parsed);
+                } catch(err) { alert('JSON 형식 오류!'); }
             };
             reader.readAsText(file);
         }
         function exportBulkData() { document.getElementById('bulkDataInput').value = JSON.stringify(db, null, 2); }
+        
+        // 💡 대용량 텍스트 또는 파일로 가져올 때 누락된 카테고리를 자동 추출하여 추가하는 함수
+        function processImportedData(parsed) {
+            if (parsed.plants) db.plants = parsed.plants;
+            if (parsed.transactions) db.transactions = parsed.transactions;
+            if (parsed.plantCats) db.plantCats = parsed.plantCats;
+            if (parsed.ledgerCats) db.ledgerCats = parsed.ledgerCats;
+
+            // 식물 데이터에 있는 카테고리 중 plantCats에 없는 것이 있다면 자동으로 추가
+            db.plants.forEach(p => {
+                if (p.category && !db.plantCats.includes(p.category)) {
+                    db.plantCats.push(p.category);
+                }
+            });
+
+            // 가계부 데이터에 있는 카테고리 중 ledgerCats에 없는 것이 있다면 자동으로 추가
+            db.transactions.forEach(t => {
+                if (t.category && !db.ledgerCats.includes(t.category)) {
+                    db.ledgerCats.push(t.category);
+                }
+            });
+
+            saveDB(); 
+            alert('데이터 불러오기 및 누락 카테고리 자동 연동 완료!'); 
+            location.reload();
+        }
+
         function importBulkData() {
             try {
                 let parsed = JSON.parse(document.getElementById('bulkDataInput').value);
-                if(parsed.plants) db.plants = parsed.plants;
-                if(parsed.transactions) db.transactions = parsed.transactions;
-                saveDB(); alert('적용 완료!'); location.reload();
+                processImportedData(parsed);
             } catch(e) { alert('JSON 형식 오류!'); }
         }
+
         function copyBulkData() { navigator.clipboard.writeText(document.getElementById('bulkDataInput').value); alert('복사 완료!'); }
         
         function addLedgerCat() {
