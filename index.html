@@ -179,7 +179,7 @@
         </div>
 
         <div class="card">
-            <h4 style="margin:0 0 10px 0;">내역 추가</h4>
+            <h4 id="ledger-form-title" style="margin:0 0 10px 0;">내역 추가</h4>
             <div style="display:flex; gap:5px; margin-bottom:8px;">
                 <button id="btn-exp-type" onclick="setLedgerType('expense')" style="background:var(--expense); flex:1;">구매</button>
                 <button id="btn-inc-type" onclick="setLedgerType('income')" style="background:#8A8672; flex:1;">판매</button>
@@ -196,7 +196,13 @@
             </div>
 
             <input type="text" id="ledger-memo" placeholder="메모 (선택)" style="margin:0 0 8px 0;">
+
+            <label style="font-size: 11px; color: #666; display: block; margin-bottom: 4px;">연결할 식물 (선택)</label>
+            <div id="link-plant-rows"></div>
+            <button type="button" onclick="addLinkRow()" aria-label="연결할 식물 행 추가" style="width: 100%; margin: 0 0 8px 0; padding: 6px; background: transparent; color: var(--ink); border: 1px dashed var(--moss); font-size: 18px; line-height: 1; text-align: center;">+</button>
+
             <button id="btn-save" onclick="handleSave()" style="width: 100%;">저장하기</button>
+            <button id="btn-cancel-edit" onclick="cancelEditTx()" class="secondary" style="width: 100%; margin-top: 6px; display: none;">수정 취소</button>
         </div>
 
         <div class="card">
@@ -530,8 +536,9 @@
             renderLedgerList();
             renderPlantList();
             renderCatSettings();
-            updateFilterDropdowns(); 
+            updateFilterDropdowns();
             renderStats();
+            renderLinkRows();
         }
 
         function initSelectBoxes() {
@@ -864,17 +871,23 @@
             let todayStr = new Date().toISOString().substring(0, 10);
             
             paginatedPlants.forEach(p => {
-                let lastWatered = (p.history && p.history.length > 0) ? p.history[p.history.length - 1] : p.createdAt;
-                let next = new Date(lastWatered);
-                next.setDate(next.getDate() + parseInt(p.interval));
-                let nextStr = next.toISOString().substring(0, 10);
-                let diff = Math.ceil((new Date(nextStr) - new Date(todayStr)) / (1000 * 60 * 60 * 24));
-                let dDayText = diff === 0 ? "🔥 오늘 물주는 날!" : (diff > 0 ? `⏰ D-${diff}` : `⚠️ 지남 (${Math.abs(diff)}일 연장)`);
-                
+                let hasHistory = p.history && p.history.length > 0;
+                let lastWatered = hasHistory ? p.history[p.history.length - 1] : p.createdAt;
+                // 물주기 주기/기준일이 없는 식물(예: 거래에서 새로 등록한 식물)은 예정일 계산을 건너뜀
+                let intervalNum = parseInt(p.interval);
+                let nextStr = null, dDayText = '';
+                let next = lastWatered ? new Date(lastWatered) : null;
+                if (next && !isNaN(next) && !isNaN(intervalNum)) {
+                    next.setDate(next.getDate() + intervalNum);
+                    nextStr = next.toISOString().substring(0, 10);
+                    let diff = Math.ceil((new Date(nextStr) - new Date(todayStr)) / (1000 * 60 * 60 * 24));
+                    dDayText = diff === 0 ? "🔥 오늘 물주는 날!" : (diff > 0 ? `⏰ D-${diff}` : `⚠️ 지남 (${Math.abs(diff)}일 연장)`);
+                }
+
                 let isFinished = (p.status || '').includes("RIP") || (p.status || '').includes("판매 완료");
-                let buttonHtml = isFinished ? 
+                let buttonHtml = isFinished ?
                     `<button disabled style="background:#e9ecef; color:#adb5bd; border:none; border-radius:8px; padding:10px; width:100%; margin-top:5px; font-weight:bold;">${p.status.includes("RIP") ? '👼' : '💰 판매 완료된 식물입니다'}</button>` :
-                    (lastWatered === todayStr ? `<div style="background:#f0f0f0; color:#888; border-radius:8px; padding:10px; text-align:center; font-weight:bold; width:100%; margin-top:5px;">✨ 오늘 물주기 완료</div>` :
+                    (hasHistory && lastWatered === todayStr ? `<div style="background:#f0f0f0; color:#888; border-radius:8px; padding:10px; text-align:center; font-weight:bold; width:100%; margin-top:5px;">✨ 오늘 물주기 완료</div>` :
                     `<button onclick="waterPlant(${p.id})" style="background:var(--water); color:white; border:none; border-radius:8px; padding:10px; cursor:pointer; font-weight:bold; width:100%; margin-top:5px;">💧 방금 물 줬어요! (클릭)</button>`);
 
                 html += `
@@ -886,9 +899,9 @@
                         <div style="font-size:13px; color:#555; margin:8px 0; line-height:1.6;">
                             🏡 집에 온 날: <b>${p.createdAt || '-'}</b> ${p.source ? `| 출처: <b>${p.source}</b>` : ''}<br>
                             ${p.buyPrice ? `💰 구매가: <b>${Number(p.buyPrice).toLocaleString()}원</b><br>` : ''}
-                            마지막 급수일: ${lastWatered}<br>
-                            ${isFinished ? '' : `<b>다음 예정일: ${nextStr} (<span style="color:var(--expense)">${dDayText}</span>)</b><br>`}
-                            설정 주기: ${p.interval}일 마다 | 현재 상태: <b>${p.status || '🟢 건강'}</b>
+                            마지막 급수일: ${hasHistory ? lastWatered : '-'}<br>
+                            ${isFinished ? '' : (nextStr ? `<b>다음 예정일: ${nextStr} (<span style="color:var(--expense)">${dDayText}</span>)</b><br>` : `<b>다음 예정일: -</b> <span style="font-size:12px; color:#888;">(물주기 미설정)</span><br>`)}
+                            설정 주기: ${isNaN(intervalNum) ? '미설정' : `${p.interval}일 마다`} | 현재 상태: <b>${p.status || '🟢 건강'}</b>
                         </div>
                         <div onclick="event.stopPropagation()">${buttonHtml}</div>
                     </div>`;
@@ -901,6 +914,17 @@
         function deletePlant(id) {
             if(confirm('이 식물을 삭제하시겠습니까?')) {
                 db.plants = db.plants.filter(p => p.id !== id);
+                // 거래와 거래금액은 유지하고, 이 식물과의 연결 정보만 정리
+                db.transactions.forEach(t => {
+                    if (Array.isArray(t.plantIds)) {
+                        t.plantIds = t.plantIds.filter(pid => !sameId(pid, id));
+                        if (t.plantIds.length === 0) delete t.plantIds;
+                    }
+                    if (t.salePrevStatus) {
+                        delete t.salePrevStatus[String(id)];
+                        if (Object.keys(t.salePrevStatus).length === 0) delete t.salePrevStatus;
+                    }
+                });
                 saveDB();
                 renderAll();
             }
@@ -916,7 +940,8 @@
             let catOptions = sortedPlantCats.map(cat => `<option value="${cat}" ${p.category === cat ? 'selected' : ''}>${cat}</option>`).join('');
             let statuses = ['🟢 건강', '🟡 요양중', '🔴 주의', '❌ RIP', '💰 판매 완료', '🌿 삽수'];
             let statusOptions = statuses.map(s => `<option value="${s}" ${(p.status || '🟢 건강') === s ? 'selected' : ''}>${s}</option>`).join('');
-            let lastWatered = (p.history && p.history.length > 0) ? p.history[p.history.length - 1] : (p.createdAt || '');
+            // 급수 이력이 없으면 비워 둠 (입수일이 급수 기록으로 저장되지 않도록)
+            let lastWatered = (p.history && p.history.length > 0) ? p.history[p.history.length - 1] : '';
 
             document.getElementById('sheet-title').innerText = `🪴 식물 정보 수정`;
             document.getElementById('sheet-content').innerHTML = `
@@ -991,20 +1016,334 @@
             currentLedgerType = type;
             document.getElementById('btn-exp-type').style.background = type === 'expense' ? 'var(--expense)' : '#8A8672';
             document.getElementById('btn-inc-type').style.background = type === 'income' ? 'var(--income)' : '#8A8672';
+            renderLinkRows();
         }
-        function handleSave() { editingId ? updateTransaction() : addTransaction(); }
-        function addTransaction() {
+
+        // ===== 거래 ↔ 식물 연결 =====
+        // 거래(transaction)에 추가되는 필드 (연결이 있을 때만 존재)
+        //   plantIds:       연결된 식물 고유 ID 배열
+        //   salePrevStatus: (판매 거래) 이 판매로 '판매 완료'가 되기 전 상태 { [식물ID]: 이전 상태 }
+        const SOLD_STATUS = '💰 판매 완료';
+        const DEFAULT_PLANT_STATUS = '🟢 건강';
+        const NEW_PLANT_VALUE = '__new__';
+        let linkRows = [];          // 입력 폼의 '연결할 식물' 행들 { key, cat, plantId, newName }
+        let linkRowSeq = 0;
+        let editFormBackup = null;  // 수정 진입 전 폼 상태(날짜/구분/카테고리)
+
+        function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+        function sameId(a, b) { return a !== undefined && a !== null && b !== undefined && b !== null && String(a) === String(b); }
+        function findPlant(id) { return db.plants.find(p => sameId(p.id, id)); }
+        function findTx(id) { return db.transactions.find(t => sameId(t.id, id)); }
+        function txPlantIds(t) { return (t && Array.isArray(t.plantIds)) ? t.plantIds : []; }
+        function isSoldStatus(s) { return (s || '').includes('판매 완료'); }
+        function plantCatOf(p) { return p.category || '미분류'; }
+
+        // 여러 개를 한 번에 만들어도 겹치지 않는 숫자 ID
+        function genUniqueIds(list, count) {
+            let maxId = 0;
+            list.forEach(x => { let n = Number(x.id); if (Number.isFinite(n) && n > maxId) maxId = n; });
+            let base = Math.max(Date.now(), maxId + 1);
+            return Array.from({ length: count }, (_, i) => base + i);
+        }
+
+        // 다른 판매내역(현재 수정 중인 거래 제외)에 이미 연결된 경우 그 거래를 반환
+        function saleOwnerOf(plantId) {
+            return db.transactions.find(t => t.type === 'income' && !sameId(t.id, editingId) && txPlantIds(t).some(id => sameId(id, plantId))) || null;
+        }
+
+        function linkPlantCatList() {
+            let cats = [...db.plantCats];
+            db.plants.forEach(p => { let c = plantCatOf(p); if (!cats.includes(c)) cats.push(c); });
+            return cats.sort((a, b) => a.localeCompare(b, 'ko'));
+        }
+
+        function plantOptionLabel(p) {
+            let parts = [p.name, (p.location && p.location.trim()) ? p.location.trim() : '위치 미정'];
+            if (p.createdAt) parts.push(p.createdAt);
+            let s = p.status || '';
+            if (s.includes('판매 완료')) parts.push('판매 완료');
+            else if (s.includes('RIP')) parts.push('RIP');
+            return parts.join(' · ');
+        }
+
+        function addLinkRow() {
+            let cats = linkPlantCatList();
+            linkRows.push({ key: ++linkRowSeq, cat: cats[0] || '', plantId: '', newName: '' });
+            renderLinkRows();
+        }
+        function removeLinkRow(key) {   // 연결 행만 제거 (실제 식물은 삭제하지 않음)
+            linkRows = linkRows.filter(r => r.key !== key);
+            renderLinkRows();
+        }
+        function onLinkRowCat(key, cat) {
+            let row = linkRows.find(r => r.key === key); if (!row) return;
+            row.cat = cat;
+            if (row.plantId && row.plantId !== NEW_PLANT_VALUE) row.plantId = '';
+            renderLinkRows();
+        }
+        function onLinkRowPlant(key, val) {
+            let row = linkRows.find(r => r.key === key); if (!row) return;
+            row.plantId = val;
+            renderLinkRows();
+        }
+        function onLinkRowName(key, val) {
+            let row = linkRows.find(r => r.key === key); if (row) row.newName = val;
+        }
+
+        function renderLinkRows() {
+            let box = document.getElementById('link-plant-rows');
+            if (!box) return;
+            let cats = linkPlantCatList();
+            let isSale = currentLedgerType === 'income';
+
+            box.innerHTML = linkRows.map(row => {
+                if (row.plantId && row.plantId !== NEW_PLANT_VALUE && !findPlant(row.plantId)) row.plantId = ''; // 삭제된 식물
+                if (!cats.includes(row.cat)) row.cat = cats[0] || '';
+
+                let catOpts = cats.map(c => `<option value="${esc(c)}" ${c === row.cat ? 'selected' : ''}>${esc(c)}</option>`).join('');
+                let plants = db.plants.filter(p => plantCatOf(p) === row.cat)
+                    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko') || String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+
+                let plantOpts = `<option value="" ${!row.plantId ? 'selected' : ''}>식물 선택</option>`;
+                plantOpts += `<option value="${NEW_PLANT_VALUE}" ${row.plantId === NEW_PLANT_VALUE ? 'selected' : ''}>＋ 새로 등록</option>`;
+                plants.forEach(p => {
+                    let pid = String(p.id);
+                    let selected = row.plantId === pid;
+                    let usedInOtherRow = linkRows.some(r => r !== row && r.plantId === pid);
+                    let owner = isSale ? saleOwnerOf(p.id) : null;
+                    if (owner && !selected) return; // 다른 판매내역에 연결되어 판매 완료된 식물은 숨김
+                    let label = plantOptionLabel(p);
+                    if (owner) label += ' ⚠ 다른 판매내역에 연결됨';
+                    if (usedInOtherRow && !selected) label += ' (선택됨)';
+                    plantOpts += `<option value="${esc(pid)}" ${selected ? 'selected' : ''} ${usedInOtherRow && !selected ? 'disabled' : ''}>${esc(label)}</option>`;
+                });
+
+                return `
+                    <div style="margin-bottom:6px;">
+                        <div style="display:flex; gap:6px; align-items:stretch;">
+                            <select onchange="onLinkRowCat(${row.key}, this.value)" style="flex:1; min-width:0; margin:0;">${catOpts}</select>
+                            <select onchange="onLinkRowPlant(${row.key}, this.value)" style="flex:1.4; min-width:0; margin:0;">${plantOpts}</select>
+                            <button type="button" onclick="removeLinkRow(${row.key})" aria-label="이 연결 행 제거" style="flex-shrink:0; width:40px; padding:0; margin:0; background:#8A8672; font-size:18px; line-height:1;">−</button>
+                        </div>
+                        ${row.plantId === NEW_PLANT_VALUE ? `<input type="text" placeholder="새 식물 이름" value="${esc(row.newName)}" oninput="onLinkRowName(${row.key}, this.value)" style="width:100%; margin:6px 0 0 0;">` : ''}
+                    </div>`;
+            }).join('');
+        }
+
+        // 입력 검증만 수행 (데이터 변경 없음). 실패 시 null
+        function readLedgerForm() {
             let date = document.getElementById('ledger-date').value;
             let category = document.getElementById('ledger-category').value;
             let amount = parseInt(document.getElementById('ledger-amount').value.replace(/,/g, ''));
-            if(isNaN(amount) || !amount) return alert('금액을 입력해주세요.');
-            db.transactions.push({ id: Date.now(), date, type: currentLedgerType, category, amount, memo: document.getElementById('ledger-memo').value });
-            saveDB(); 
+            let memo = document.getElementById('ledger-memo').value;
+            // 0원(나눔·교환 등)도 저장 가능, 빈칸·음수만 막음
+            if (isNaN(amount) || amount < 0) { alert('금액을 입력해주세요. (나눔·교환은 0)'); return null; }
+
+            let entries = []; // { plantId } 또는 { isNew, name, category }
+            for (let row of linkRows) {
+                if (!row.plantId) { alert('연결할 식물을 선택하거나, 필요 없는 행은 − 버튼으로 지워주세요.'); return null; }
+                if (row.plantId === NEW_PLANT_VALUE) {
+                    let name = (row.newName || '').trim();
+                    if (!name) { alert('새로 등록할 식물 이름을 입력해주세요.'); return null; }
+                    entries.push({ isNew: true, name, category: row.cat });
+                    continue;
+                }
+                let p = findPlant(row.plantId);
+                if (!p) { alert('선택한 식물을 찾을 수 없습니다. 다시 선택해주세요.'); renderLinkRows(); return null; }
+                if (entries.some(e => !e.isNew && sameId(e.plantId, p.id))) { alert(`'${p.name}' 식물이 중복 선택되었습니다.`); return null; }
+                if (currentLedgerType === 'income') {
+                    let owner = saleOwnerOf(p.id);
+                    if (owner) { alert(`'${p.name}' 식물은 이미 다른 판매내역(${owner.date || '-'} ${owner.memo || ''})에 연결되어 있습니다.`); return null; }
+                }
+                entries.push({ plantId: p.id });
+            }
+            return { date, category, amount, memo, type: currentLedgerType, entries };
+        }
+
+        // 판매 연결 해제: 이 판매로 바꾼 상태만, 아직 '판매 완료'로 남아 있을 때 이전 상태로 복원
+        function releaseSaleLink(tx, plantId) {
+            let prev = tx.salePrevStatus ? tx.salePrevStatus[String(plantId)] : undefined;
+            let p = findPlant(plantId);
+            if (p && prev !== undefined && isSoldStatus(p.status)) p.status = prev;
+        }
+
+        // 검증이 끝난 폼 내용을 거래·식물에 한 번에 반영 (실패 시 전체 되돌림)
+        function commitTransaction(form) {
+            let snapshot = JSON.stringify({ plants: db.plants, transactions: db.transactions });
+            try {
+                let tx = null, oldType = null, oldIds = [], oldPrev = {};
+                if (editingId !== null) {
+                    tx = findTx(editingId);
+                    if (!tx) { alert('수정할 내역을 찾을 수 없습니다.'); resetLedgerForm(); renderAll(); return false; }
+                    oldType = tx.type;
+                    oldIds = [...txPlantIds(tx)];
+                    oldPrev = Object.assign({}, tx.salePrevStatus || {});
+                }
+                let wasSaleLinked = id => oldType === 'income' && oldIds.some(x => sameId(x, id));
+
+                // 1) 기존 판매 영향 정리: 판매 대상에서 빠졌거나, 구분이 구매로 바뀐 식물
+                if (oldType === 'income') {
+                    oldIds.forEach(id => {
+                        let stillSold = form.type === 'income' && form.entries.some(e => !e.isNew && sameId(e.plantId, id));
+                        if (!stillSold) releaseSaleLink(tx, id);
+                    });
+                }
+
+                // 2) 새 식물 생성 (급수 이력·물주기 주기는 비워 둠, 구매가는 입력하지 않음)
+                let newCount = form.entries.filter(e => e.isNew).length;
+                let newIds = genUniqueIds(db.plants, newCount);
+                let newIdx = 0;
+                let created = [];
+                let linkedIds = form.entries.map(e => {
+                    if (!e.isNew) return e.plantId;
+                    let id = newIds[newIdx++];
+                    created.push({
+                        id, name: e.name, category: e.category,
+                        interval: '', createdAt: form.type === 'expense' ? form.date : '',
+                        history: [], status: form.type === 'income' ? SOLD_STATUS : DEFAULT_PLANT_STATUS,
+                        location: '', source: '', buyPrice: 0, greenhouse: false
+                    });
+                    return id;
+                });
+
+                // 3) 판매 처리: 새로 연결된 기존 식물만 '판매 완료'로 변경하고 이전 상태 보관
+                let newPrev = {};
+                if (form.type === 'income') {
+                    form.entries.filter(e => !e.isNew).forEach(e => {
+                        let key = String(e.plantId);
+                        if (wasSaleLinked(e.plantId)) {
+                            if (oldPrev[key] !== undefined) newPrev[key] = oldPrev[key];
+                            return;
+                        }
+                        let p = findPlant(e.plantId);
+                        if (p && !isSoldStatus(p.status)) { // 이미 판매 완료였던 식물은 이전 상태를 기록하지 않음
+                            newPrev[key] = p.status || DEFAULT_PLANT_STATUS;
+                            p.status = SOLD_STATUS;
+                        }
+                    });
+                }
+
+                // 4) 거래 저장 (수정이면 같은 거래를 갱신)
+                if (!tx) {
+                    tx = { id: genUniqueIds(db.transactions, 1)[0] };
+                    db.transactions.push(tx);
+                }
+                tx.date = form.date;
+                tx.type = form.type;
+                tx.category = form.category;
+                tx.amount = form.amount;
+                tx.memo = form.memo;
+                if (linkedIds.length) tx.plantIds = linkedIds; else delete tx.plantIds;
+                if (Object.keys(newPrev).length) tx.salePrevStatus = newPrev; else delete tx.salePrevStatus;
+                db.plants.push(...created);
+
+                saveDB();
+                return true;
+            } catch (err) {
+                let b = JSON.parse(snapshot);
+                db.plants = b.plants;
+                db.transactions = b.transactions;
+                try { saveDB(); } catch (_) {}
+                alert('저장 중 오류가 발생해 변경 내용을 반영하지 않았습니다.');
+                return false;
+            }
+        }
+
+        function updateLedgerFormMode() {
+            let editing = editingId !== null;
+            document.getElementById('ledger-form-title').innerText = editing ? '내역 수정' : '내역 추가';
+            document.getElementById('btn-save').innerText = editing ? '수정 저장' : '저장하기';
+            document.getElementById('btn-cancel-edit').style.display = editing ? 'block' : 'none';
+        }
+
+        function resetLedgerForm() {
+            editingId = null;
+            if (editFormBackup) {
+                document.getElementById('ledger-date').value = editFormBackup.date;
+                setLedgerType(editFormBackup.type);
+                let catEl = document.getElementById('ledger-category');
+                [...catEl.options].forEach(o => { if (o.dataset.temp) o.remove(); });
+                catEl.value = editFormBackup.category;
+                if (catEl.selectedIndex < 0 && catEl.options.length) catEl.selectedIndex = 0;
+                editFormBackup = null;
+            }
             document.getElementById('ledger-amount').value = '';
             document.getElementById('ledger-memo').value = '';
+            linkRows = [];
+            updateLedgerFormMode();
+            renderLinkRows();
+        }
+
+        function startEditTx(id) {
+            let tx = findTx(id);
+            if (!tx) return;
+            if (editingId === null) {
+                editFormBackup = {
+                    date: document.getElementById('ledger-date').value,
+                    type: currentLedgerType,
+                    category: document.getElementById('ledger-category').value
+                };
+            }
+            editingId = tx.id;
+            document.getElementById('ledger-date').value = tx.date || '';
+            setLedgerType(tx.type === 'income' ? 'income' : 'expense');
+            let catEl = document.getElementById('ledger-category');
+            [...catEl.options].forEach(o => { if (o.dataset.temp) o.remove(); });
+            if (tx.category && ![...catEl.options].some(o => o.value === tx.category)) {
+                let opt = document.createElement('option');
+                opt.value = tx.category; opt.textContent = tx.category; opt.dataset.temp = '1';
+                catEl.appendChild(opt);
+            }
+            catEl.value = tx.category;
+            let amtEl = document.getElementById('ledger-amount');
+            let txAmount = parseInt(tx.amount);
+            amtEl.value = isNaN(txAmount) ? '' : String(txAmount);
+            formatAmount(amtEl);
+            document.getElementById('ledger-memo').value = tx.memo || '';
+            linkRows = txPlantIds(tx).map(pid => findPlant(pid)).filter(Boolean)
+                .map(p => ({ key: ++linkRowSeq, cat: plantCatOf(p), plantId: String(p.id), newName: '' }));
+            updateLedgerFormMode();
+            renderLinkRows();
+            document.getElementById('ledger-form-title').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        function cancelEditTx() { resetLedgerForm(); }
+
+        function handleSave() { editingId ? updateTransaction() : addTransaction(); }
+        function addTransaction() {
+            let form = readLedgerForm();
+            if (!form) return;
+            if (!commitTransaction(form)) return;
+            document.getElementById('ledger-amount').value = '';
+            document.getElementById('ledger-memo').value = '';
+            linkRows = [];
             renderAll();
         }
-        function deleteTx(id) { db.transactions = db.transactions.filter(t => t.id !== id); saveDB(); renderAll(); }
+        function updateTransaction() {
+            let form = readLedgerForm();
+            if (!form) return;
+            if (!commitTransaction(form)) return;
+            resetLedgerForm();
+            renderAll();
+        }
+        function deleteTx(id) {
+            let tx = findTx(id);
+            // 판매 거래 삭제 시: 이 판매로 바꾼 식물 상태만 복원 (식물·급수 이력은 유지)
+            if (tx && tx.type === 'income') txPlantIds(tx).forEach(pid => releaseSaleLink(tx, pid));
+            db.transactions = db.transactions.filter(t => !sameId(t.id, id));
+            if (sameId(editingId, id)) resetLedgerForm();
+            saveDB(); renderAll();
+        }
+        function confirmDeleteTx(id) {
+            let tx = findTx(id);
+            if (!tx) return;
+            let msg = `이 ${tx.type === 'income' ? '판매' : '구매'}내역을 삭제하시겠습니까?\n[${tx.category}] ${tx.memo || ''} ${Number(tx.amount || 0).toLocaleString()}원`;
+            if (txPlantIds(tx).length) {
+                msg += '\n\n연결된 식물은 삭제되지 않고 그대로 남습니다.';
+                if (tx.type === 'income') msg += '\n이 판매로 판매 완료된 식물은 이전 상태로 돌아갑니다.';
+            }
+            if (confirm(msg)) deleteTx(id);
+        }
         
         function changeFinanceMonth() { 
             currentFinanceMonth = document.getElementById('finance-month-selector').value; 
@@ -1040,7 +1379,10 @@
             
             let listEl = document.getElementById('ledger-list');
             listEl.innerHTML = filtered.length === 0 ? `<li style="text-align:center; color:#888; padding:20px;">내역이 없습니다.</li>` :
-                filtered.map(t => `<li class="item-row"><div><span class="badge ${t.type==='expense'?'exp':'inc'}">${t.type==='expense'?'구매':'판매'}</span> <b>[${t.category}]</b> ${t.memo||''}</div><div style="color:var(--${t.type})">${t.type==='expense'?'-':'+'}${t.amount.toLocaleString()}원</div></li>`).join('');
+                filtered.map(t => {
+                    let linkedNames = txPlantIds(t).map(pid => findPlant(pid)).filter(Boolean).map(p => esc(p.name)).join(', ');
+                    return `<li class="item-row"><div><span class="badge ${t.type==='expense'?'exp':'inc'}">${t.type==='expense'?'구매':'판매'}</span> <b>[${t.category}]</b> ${t.memo||''}${linkedNames ? `<div style="font-size:11px; color:#888; margin-top:3px;">🪴 ${linkedNames}</div>` : ''}</div><div style="display:flex; align-items:center; gap:6px; flex-shrink:0;"><span style="color:var(--${t.type})">${t.type==='expense'?'-':'+'}${t.amount.toLocaleString()}원</span><button onclick="startEditTx(${JSON.stringify(t.id).replace(/"/g, '&quot;')})" style="padding:3px 7px; font-size:11px; background:#8A8672; border-radius:6px;">수정</button><button onclick="confirmDeleteTx(${JSON.stringify(t.id).replace(/"/g, '&quot;')})" style="padding:3px 7px; font-size:11px; background:var(--expense); border-radius:6px;">삭제</button></div></li>`;
+                }).join('');
         }
         
         function formatAmount(input) { input.value = input.value.replace(/,/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
